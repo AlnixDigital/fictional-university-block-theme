@@ -1,5 +1,14 @@
 <?php
 
+function universityQueryVars($vars)
+{
+    $vars[] = 'skyColor'; // This is how we register a new query var
+    $vars[] = 'grassColor';
+    return $vars;
+}
+
+add_filter('query_vars', 'universityQueryVars');
+
 require get_theme_file_path('/inc/like-route.php');
 require get_theme_file_path('/inc/search-route.php');
 
@@ -193,15 +202,65 @@ function ignoreCertainFiles($exclude_filters)
     return $exclude_filters;
 }
 
+class PlaceholderBlock
+{
+    private $name;
+
+    function __construct($name)
+    {
+        $this->name = $name;
+
+        add_action('init', [$this, 'onInit']);
+    }
+
+    function ourRenderCallback($attributes, $content)
+    {
+        ob_start();
+        require get_theme_file_path("/our-blocks/{$this->name}.php");
+        return ob_get_clean();
+    }
+
+    function onInit()
+    {
+        wp_register_script($this->name, get_stylesheet_directory_uri() . "/our-blocks/{$this->name}.js", array('wp-blocks', 'wp-editor'));
+
+        register_block_type("ourblocktheme/{$this->name}", array(
+            'editor_script' => $this->name,
+            'render_callback' => [$this, 'ourRenderCallback']
+        ));
+    }
+}
+
+new PlaceholderBlock("eventsandblogs");
+new PlaceholderBlock("header");
+new PlaceholderBlock("footer");
+new PlaceholderBlock("singlepost");
+new PlaceholderBlock("page");
+new PlaceholderBlock("blogindex");
+new PlaceholderBlock("programarchive");
+new PlaceholderBlock("singleprogram");
+new PlaceholderBlock("singleprofessor");
+new PlaceholderBlock("mynotes");
+new PlaceholderBlock("archivecampus");
+new PlaceholderBlock("archiveevent");
+new PlaceholderBlock("archive");
+new PlaceholderBlock("pastevents");
+new PlaceholderBlock("search");
+new PlaceholderBlock("searchresults");
+new PlaceholderBlock("singlecampus");
+new PlaceholderBlock("singleevent");
+
 class JSXBlock
 {
     private $name;
     private $renderCallback;
+    private $data;
 
-    function __construct($name, $renderCallback = null)
+    function __construct($name, $renderCallback = null, $data = null)
     {
         $this->name = $name;
         $this->renderCallback = $renderCallback;
+        $this->data = $data;
         add_action('init', [$this, 'onInit']);
     }
 
@@ -215,6 +274,9 @@ class JSXBlock
     function onInit()
     {
         wp_register_script($this->name, get_stylesheet_directory_uri() . "/build/{$this->name}.js", array('wp-blocks', 'wp-editor'));
+        if ($this->data) {
+            wp_localize_script($this->name, $this->name, $this->data);
+        }
 
         $ourArgs = array(
             'editor_script' => $this->name
@@ -228,6 +290,25 @@ class JSXBlock
     }
 }
 
-new JSXBlock('banner', true);
+new JSXBlock('banner', true, ['fallbackimage' => get_theme_file_uri('/images/library-hero.jpg')]);
 new JSXBlock('genericheading');
 new JSXBlock('genericbutton');
+new JSXBlock('slideshow', true);
+new JSXBlock('slide', true, ['themeimagepath' => get_theme_file_uri('/images/')]);
+
+function myallowedblocks($allowed_block_types, $editor_context)
+{
+    if ($editor_context->post->post_type == "professor") {
+        return array('core/paragraph', 'core/list');
+    }
+
+    // If you are on a page/post editor screen.
+    if (!empty($editor_context->post)) {
+        return $allowed_block_types;
+    }
+
+    // If you are on the FSE screen.
+    return array('ourblocktheme/header', 'ourblocktheme/footer');
+}
+
+add_filter('allowed_block_types_all', 'myallowedblocks', 10, 2);
